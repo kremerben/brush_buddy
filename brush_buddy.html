@@ -19,7 +19,16 @@
   .countdown{ font-size:28px; font-weight:800; color:var(--accent); background:rgba(58,162,255,.08);
     padding:8px 12px; border-radius:12px; }
   .progress{ width:100%; height:10px; background:rgba(20,30,50,.06); border-radius:999px; overflow:hidden; margin-top:12px; }
-  .progress > i{ display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); transition:width .8s linear; }
+  .progress > i{ display:block; height:100%; width:0%;
+    background:linear-gradient(90deg,#ff004c,#ff7a00,#ffee00,#33ff00,#00e5ff,#5a00ff,#ff00f0,#ff004c);
+    background-size:300% 100%;
+    animation:rainbow-crawl 3s linear infinite;
+    transition:width .8s linear;
+  }
+  @keyframes rainbow-crawl{
+    0%{ background-position:0% 50%; }
+    100%{ background-position:100% 50%; }
+  }
   .controls{ display:flex; gap:10px; margin-top:12px; }
   button{ flex:1; padding:12px 10px; border-radius:12px; font-weight:700; border:0; background:linear-gradient(180deg,#f3f7ff,#e6f1ff); color:var(--text); box-shadow:0 6px 18px rgba(40,60,100,.06); font-size:16px; }
   button.primary{ background:linear-gradient(180deg,var(--accent),#1f99ff); color:#fff; }
@@ -107,14 +116,14 @@ function toTitleCase(str) {
 function buildSequenceFor(prefix){
   const P = toTitleCase(prefix);
   return [
-    { key:`${prefix}-chew-right`, label:`${P} chewing — Right`, duration:15 },
-    { key:`${prefix}-chew-left`,  label:`${P} chewing — Left`,  duration:15 },
+    { key:`${prefix}-chew-right`, label:`${P} — Right`, duration:15 },
+    { key:`${prefix}-chew-left`,  label:`${P} — Left`,  duration:15 },
     { key:`${prefix}-front`,      label:`${P} front`,           duration:10 },
-    { key:`${prefix}-behind`,     label:`Behind ${P} front`,    duration:10 },
-    { key:`${prefix}-in-left`,    label:`${P} inside — Left`,   duration:7  },
-    { key:`${prefix}-out-left`,   label:`${P} outside — Left`,  duration:7  },
-    { key:`${prefix}-in-right`,   label:`${P} inside — Right`,  duration:7  },
-    { key:`${prefix}-out-right`,  label:`${P} outside — Right`, duration:7  },
+    { key:`${prefix}-behind`,     label:`Behind front teeth`,    duration:10 },
+    { key:`${prefix}-in-left`,    label:`${P} inside - outside`,   duration:7  },
+    { key:`${prefix}-out-left`,   label:`${P} outside - inside`,  duration:7  },
+    { key:`${prefix}-in-right`,   label:`${P} inside - outside`,  duration:7  },
+    { key:`${prefix}-out-right`,  label:`${P} outside - inside`, duration:7  },
   ];
 }
 const sequence = [...buildSequenceFor('upper'), ...buildSequenceFor('lower')];
