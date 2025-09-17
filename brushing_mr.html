@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Brush Buddy 3D — Kids Brushing Timer</title>
+<style>
+  :root{ --bg:#fffbe8; --card:#ffffff; --accent:#3aa2ff; --accent-2:#ffb86b; --text:#203040; --muted:#6b7890; }
+  html,body{ height:100%; margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial;
+    background:linear-gradient(180deg,var(--bg),#fff); color:var(--text); }
+  .app{ max-width:430px; margin:0 auto; padding:14px; box-sizing:border-box; }
+  header{ display:flex; align-items:center; gap:12px; padding:8px 6px; }
+  h1{ font-size:20px; margin:0; }
+  .card{ background:var(--card); border-radius:14px; box-shadow:0 6px 18px rgba(20,30,50,.08); padding:12px; }
+  .three-wrap{ width:100%; height:260px; border-radius:12px; overflow:hidden; background:#f2f6ff;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.04); }
+  .status{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px; }
+  .step-label{ font-weight:700; font-size:18px; }
+  .countdown{ font-size:28px; font-weight:800; color:var(--accent); background:rgba(58,162,255,.08);
+    padding:8px 12px; border-radius:12px; }
+  .progress{ width:100%; height:10px; background:rgba(20,30,50,.06); border-radius:999px; overflow:hidden; margin-top:12px; }
+  .progress > i{ display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--accent-2)); transition:width .8s linear; }
+  .controls{ display:flex; gap:10px; margin-top:12px; }
+  button{ flex:1; padding:12px 10px; border-radius:12px; font-weight:700; border:0; background:linear-gradient(180deg,#f3f7ff,#e6f1ff); color:var(--text); box-shadow:0 6px 18px rgba(40,60,100,.06); font-size:16px; }
+  button.primary{ background:linear-gradient(180deg,var(--accent),#1f99ff); color:#fff; }
+  button.ghost{ background:transparent; border:2px solid rgba(40,60,100,.06); }
+  .footer-note{ margin-top:10px; font-size:13px; color:var(--muted); text-align:center; }
+  @media (max-width:380px){ .three-wrap{ height:230px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Brush Buddy 3D</h1>
+      <div style="font-size:13px;color:var(--muted)">Follow the 3D view — it turns to each area</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <div id="threeRoot" class="three-wrap" aria-label="3D teeth model"></div>
+
+    <div class="status">
+      <div>
+        <div class="step-label" id="stepLabel">Ready</div>
+        <div style="font-size:13px;color:var(--muted)" id="stepHint">Tap Start when ready</div>
+      </div>
+      <div class="countdown" id="countdown">—</div>
+    </div>
+
+    <div class="progress"><i id="progFill"></i></div>
+
+    <div class="controls" style="margin-top:12px;">
+      <button id="backBtn" class="ghost">◀︎ Prev</button>
+      <button id="startBtn" class="primary">Start</button>
+      <button id="nextBtn" class="ghost">Next ▶︎</button>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button id="pauseBtn" class="ghost" style="flex:1">Pause</button>
+      <button id="resetBtn" class="ghost" style="flex:1">Reset</button>
+    </div>
+
+    <div class="footer-note">
+      Put this file and <b>teeth_mr.glb</b> (or <b>teeth_mr_opt.glb</b>) in the same folder. Serve over HTTP.
+    </div>
+  </div>
+
+  <div style="height:14px"></div>
+  <div style="font-size:12px;color:var(--muted);text-align:center">
+    Works on iPhone • Add to Home Screen for full screen
+  </div>
+</div>
+
+<!-- Import map pinned to Three r147 -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.179.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "https://unpkg.com/three@0.179.0/examples/jsm/loaders/GLTFLoader.js";
+
+/* ------------------ Timer/Steps ------------------ */
+function buildSequenceFor(prefix){
+  const P = prefix.toUpperCase();
+  return [
+    { key:`${prefix}-chew-right`, label:`${P} chewing — Right`, duration:15 },
+    { key:`${prefix}-chew-left`,  label:`${P} chewing — Left`,  duration:15 },
+    { key:`${prefix}-front`,      label:`${P} front`,           duration:10 },
+    { key:`${prefix}-behind`,     label:`Behind ${P} front`,    duration:10 },
+    { key:`${prefix}-in-left`,    label:`${P} inside — Left`,   duration:7  },
+    { key:`${prefix}-out-left`,   label:`${P} outside — Left`,  duration:7  },
+    { key:`${prefix}-in-right`,   label:`${P} inside — Right`,  duration:7  },
+    { key:`${prefix}-out-right`,  label:`${P} outside — Right`, duration:7  },
+  ];
+}
+const sequence = [...buildSequenceFor('u'), ...buildSequenceFor('l')];
+
+const ui = {
+  countdown: document.getElementById('countdown'),
+  stepLabel: document.getElementById('stepLabel'),
+  stepHint:  document.getElementById('stepHint'),
+  progFill:  document.getElementById('progFill'),
+  startBtn:  document.getElementById('startBtn'),
+  pauseBtn:  document.getElementById('pauseBtn'),
+};
+let state = { idx:0, secondsLeft: sequence[0].duration, running:false, ticker:null };
+
+function formatTime(sec){ const m = Math.floor(sec/60), s = sec%60; return `${m}:${s<10?'0':''}${s}`; }
+function beep(){
+  try{ const C = new (window.AudioContext||window.webkitAudioContext)();
+    const o=C.createOscillator(), g=C.createGain(); o.type='sine'; o.frequency.value=880; g.gain.value=0.02;
+    o.connect(g); g.connect(C.destination); o.start(); setTimeout(()=>{o.stop();C.close();},120);
+  }catch{}
+}
+
+/* ------------------ 3D Scene Setup ------------------ */
+const container = document.getElementById('threeRoot');
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(container.clientWidth, container.clientHeight);
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(36, container.clientWidth/container.clientHeight, 0.01, 100);
+camera.position.set(0.6, 0.25, 0.9);
+
+// Lights
+const hemi = new THREE.HemisphereLight(0xffffff, 0x445566, 1.0);
+const dir  = new THREE.DirectionalLight(0xffffff, 0.9);
+dir.position.set(1.2, 1.1, 1.5);
+scene.add(hemi, dir);
+
+// Background
+renderer.setClearColor(new THREE.Color(0xf3f7ff), 1);
+
+// Model container
+const group = new THREE.Group();
+scene.add(group);
+let model=null;
+
+// Load the converted GLB (metallic-roughness)
+const loader = new GLTFLoader();
+loader.load(
+  './teeth_mr.glb',   // or './teeth_mr_opt.glb' if you used optimize
+  (gltf)=>{
+    model = gltf.scene;
+    // Center & scale model
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3(); const center = new THREE.Vector3();
+    box.getSize(size); box.getCenter(center);
+    model.position.sub(center);
+    const maxDim = Math.max(size.x,size.y,size.z)||1;
+    const scale = 0.8 / maxDim;
+    model.scale.setScalar(scale);
+    group.add(model);
+
+    setCameraToKey(sequence[0].key, true);
+    renderStep();
+  },
+  undefined,
+  (err)=>{
+    ui.stepHint.textContent = 'Could not load teeth_mr.glb — ensure it is next to this file.';
+    console.error(err);
+  }
+);
+
+/* ------------------ Camera View Presets ------------------ */
+const VIEWS = {
+  // UPPER
+  'u-chew-right': { pos:[ 0.55, 0.25,  0.55], look:[0,0,0] },
+  'u-chew-left' : { pos:[-0.55, 0.25,  0.55], look:[0,0,0] },
+  'u-front'     : { pos:[ 0.00, 0.18,  0.85], look:[0,0.05,0.05] },
+  'u-behind'    : { pos:[ 0.00, 0.28, -0.55], look:[0,0.05,0.00] },
+
+  'u-in-left'   : { pos:[-0.55, 0.25, -0.10], look:[-0.15,0.10,0] },
+  'u-out-left'  : { pos:[-0.55, 0.18,  0.35], look:[-0.10,0.05,0.10] },
+  'u-in-right'  : { pos:[ 0.55, 0.25, -0.10], look:[ 0.15,0.10,0] },
+  'u-out-right' : { pos:[ 0.55, 0.18,  0.35], look:[ 0.10,0.05,0.10] },
+
+  // LOWER
+  'l-chew-right': { pos:[ 0.55,-0.18,  0.55], look:[0,-0.02,0.02] },
+  'l-chew-left' : { pos:[-0.55,-0.18,  0.55], look:[0,-0.02,0.02] },
+  'l-front'     : { pos:[ 0.00,-0.10,  0.85], look:[0,-0.05,0.05] },
+  'l-behind'    : { pos:[ 0.00,-0.18, -0.55], look:[0,-0.05,0.00] },
+
+  'l-in-left'   : { pos:[-0.55,-0.12, -0.10], look:[-0.12,-0.05,0] },
+  'l-out-left'  : { pos:[-0.55,-0.12,  0.35], look:[-0.10,-0.05,0.10] },
+  'l-in-right'  : { pos:[ 0.55,-0.12, -0.10], look:[ 0.12,-0.05,0] },
+  'l-out-right' : { pos:[ 0.55,-0.12,  0.35], look:[ 0.10,-0.05,0.10] },
+};
+
+// Tween camera
+let tweenStart = 0, tweenDur = 550; // ms
+const startPos = new THREE.Vector3(); const startLook = new THREE.Vector3();
+const endPos   = new THREE.Vector3(); const endLook  = new THREE.Vector3();
+const curLook  = new THREE.Vector3(0,0,0);
+
+function setCameraToKey(key, immediate=false){
+  const v = VIEWS[key]; if(!v) return;
+  if(immediate){
+    camera.position.set(...v.pos);
+    curLook.set(...v.look);
+    camera.lookAt(curLook);
+    return;
+  }
+  startPos.copy(camera.position);
+  startLook.copy(curLook);
+  endPos.set(...v.pos);
+  endLook.set(...v.look);
+  tweenStart = performance.now();
+}
+function updateTween(now){
+  const t = Math.min(1, (now - tweenStart)/tweenDur);
+  const e = t<0.5 ? 2*t*t : 1 - Math.pow(-2*t+2,2)/2;
+  if(t<1){
+    camera.position.lerpVectors(startPos, endPos, e);
+    curLook.lerpVectors(startLook, endLook, e);
+  }else{
+    camera.position.copy(endPos);
+    curLook.copy(endLook);
+  }
+  camera.lookAt(curLook);
+}
+
+/* ------------------ Render Loop & Resize ------------------ */
+function onResize(){
+  const w = container.clientWidth, h = container.clientHeight;
+  camera.aspect = w/h; camera.updateProjectionMatrix();
+  renderer.setSize(w,h,false);
+}
+window.addEventListener('resize', onResize);
+
+renderer.setAnimationLoop((now)=>{
+  updateTween(now||performance.now());
+  renderer.render(scene, camera);
+});
+
+/* ------------------ UI / Timer Wiring ------------------ */
+function renderStep(){
+  if(state.idx >= sequence.length){
+    ui.stepLabel.textContent = 'Done!';
+    ui.stepHint.textContent  = 'All areas brushed — great job!';
+    ui.countdown.textContent = '0:00';
+    ui.progFill.style.width  = '100%';
+    navigator.vibrate && navigator.vibrate([80,40,80]);
+    return;
+  }
+  const s = sequence[state.idx];
+  ui.stepLabel.textContent = `Step ${state.idx+1} — ${s.label}`;
+  ui.stepHint.textContent  = `Brush this area for ${s.duration} seconds`;
+  ui.countdown.textContent = formatTime(state.secondsLeft);
+  const pct = Math.round((state.idx / sequence.length) * 100);
+  ui.progFill.style.width = pct + '%';
+
+  setCameraToKey(s.key, false);
+  beep(); navigator.vibrate && navigator.vibrate(40);
+}
+
+function nextStep(auto=true){
+  if(state.idx < sequence.length) state.idx++;
+  if(state.idx >= sequence.length){ stopTicker(); renderStep(); return; }
+  state.secondsLeft = sequence[state.idx].duration;
+  renderStep();
+}
+function prevStep(){
+  state.idx = Math.max(0, state.idx-1);
+  state.secondsLeft = sequence[state.idx].duration;
+  renderStep();
+}
+function startTicker(){
+  if(state.running) return;
+  state.running = true;
+  ui.startBtn.textContent='Running...';
+  ui.startBtn.classList.remove('primary');
+  ui.startBtn.disabled = true;
+  state.ticker = setInterval(()=>{
+    if(state.secondsLeft>0){
+      state.secondsLeft--; ui.countdown.textContent = formatTime(state.secondsLeft);
+    }else{
+      nextStep(true);
+    }
+  }, 1000);
+}
+function stopTicker(){
+  state.running=false; clearInterval(state.ticker); state.ticker=null;
+  ui.startBtn.textContent='Start'; ui.startBtn.classList.add('primary'); ui.startBtn.disabled=false;
+}
+function pauseToggle(){
+  if(state.running){
+    clearInterval(state.ticker); state.ticker=null; state.running=false;
+    ui.pauseBtn.textContent='Resume';
+  }else{
+    startTicker(); ui.pauseBtn.textContent='Pause';
+  }
+}
+function resetAll(){
+  stopTicker(); state.idx=0; state.secondsLeft = sequence[0].duration; renderStep();
+  ui.pauseBtn.textContent='Pause';
+}
+
+/* Buttons */
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  if(state.idx >= sequence.length) resetAll();
+  const k = sequence[state.idx].key; setCameraToKey(k, true);
+  startTicker(); beep(); navigator.vibrate && navigator.vibrate(80);
+});
+document.getElementById('nextBtn').addEventListener('click', ()=> nextStep(false));
+document.getElementById('backBtn').addEventListener('click', ()=> prevStep());
+document.getElementById('pauseBtn').addEventListener('click', ()=> pauseToggle());
+document.getElementById('resetBtn').addEventListener('click', ()=> resetAll());
+
+// Initialize
+state.secondsLeft = sequence[0].duration;
+renderStep();
+
+</script>
+</body>
+</html>

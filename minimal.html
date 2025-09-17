@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+<body style="margin:0">
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+const renderer = new THREE.WebGLRenderer({canvas: document.getElementById('c')});
+renderer.setSize(window.innerWidth, window.innerHeight);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.z = 5;
+scene.add(new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({color:0xff0000})));
+renderer.setAnimationLoop(()=>renderer.render(scene,camera));
+</script>
+</body>
+</html>

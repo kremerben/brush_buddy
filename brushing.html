@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Brush Buddy — Kids Brushing Timer</title>
+<style>
+  :root{
+    --bg:#fffbe8;
+    --card:#ffffff;
+    --accent:#3aa2ff;
+    --accent-2:#ffb86b;
+    --text:#203040;
+    --muted:#6b7890;
+  }
+  html,body{
+    height:100%;
+    margin:0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: linear-gradient(180deg,var(--bg),#fff);
+    color:var(--text);
+  }
+  .app {
+    max-width:430px; /* iPhone friendly */
+    margin:0 auto;
+    padding:14px;
+    box-sizing:border-box;
+  }
+  header{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:8px 6px;
+  }
+  h1{
+    font-size:20px;
+    margin:0;
+  }
+  .card{
+    background:var(--card);
+    border-radius:14px;
+    box-shadow: 0 6px 18px rgba(20,30,50,0.08);
+    padding:12px;
+  }
+
+  /* mouth area */
+  .mouth-wrap{
+    display:flex;
+    justify-content:center;
+    padding:8px 0 6px;
+  }
+  .mouth{
+    width:100%;
+    max-width:360px;
+    height:220px;
+    position:relative;
+  }
+  /* circles representing regions */
+  .region{
+    position:absolute;
+    width:68px;
+    height:68px;
+    border-radius:999px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:700;
+    color:var(--muted);
+    background:rgba(200,210,230,0.08);
+    transition: transform .25s ease, box-shadow .25s ease, background .25s;
+    border:3px solid rgba(255,255,255,0.6);
+  }
+  .region.small{ width:56px; height:56px; font-size:13px; }
+  .region.front { width:86px;height:86px; font-size:16px; border-radius:18px; }
+
+  .region.active{
+    transform:scale(1.05);
+    box-shadow: 0 10px 30px rgba(30,100,200,0.18);
+    color:white;
+    background: linear-gradient(180deg,var(--accent),var(--accent-2));
+    border-color: rgba(255,255,255,0.9);
+  }
+
+  /* upper row positions */
+  /* positions are approximate to resemble a mouth */
+  #u-chew-right { top:18px; right:22px; }
+  #u-chew-left  { top:18px; left:22px; }
+  #u-front     { top:48px; left:50%; transform:translateX(-50%); }
+  #u-behind    { top:88px; left:50%; transform:translateX(-50%); }
+
+  #u-in-left   { top:22px; left:112px; }
+  #u-out-left  { top:22px; left:38px; }
+  #u-in-right  { top:22px; right:112px; }
+  #u-out-right { top:22px; right:38px; }
+
+  /* lower row */
+  #l-chew-right { bottom:18px; right:22px; }
+  #l-chew-left  { bottom:18px; left:22px; }
+  #l-front     { bottom:48px; left:50%; transform:translateX(-50%); }
+  #l-behind    { bottom:88px; left:50%; transform:translateX(-50%); }
+
+  #l-in-left   { bottom:22px; left:112px; }
+  #l-out-left  { bottom:22px; left:38px; }
+  #l-in-right  { bottom:22px; right:112px; }
+  #l-out-right { bottom:22px; right:38px; }
+
+  /* timer & controls */
+  .status {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-top:10px;
+  }
+  .step-label{
+    font-weight:700;
+    font-size:18px;
+  }
+  .countdown{
+    font-size:28px;
+    font-weight:800;
+    color:var(--accent);
+    background:rgba(58,162,255,0.08);
+    padding:8px 12px;
+    border-radius:12px;
+  }
+  .controls{
+    display:flex;
+    gap:10px;
+    margin-top:12px;
+  }
+  button{
+    flex:1;
+    padding:12px 10px;
+    border-radius:12px;
+    font-weight:700;
+    border:0;
+    background:linear-gradient(180deg,#f3f7ff,#e6f1ff);
+    color:var(--text);
+    box-shadow: 0 6px 18px rgba(40,60,100,0.06);
+    font-size:16px;
+  }
+  button.primary{
+    background:linear-gradient(180deg,var(--accent),#1f99ff);
+    color:white;
+  }
+  button.ghost{
+    background:transparent;
+    border:2px solid rgba(40,60,100,0.06);
+  }
+  .progress-row{
+    margin-top:12px;
+  }
+  .progress {
+    width:100%;
+    height:10px;
+    background:rgba(20,30,50,0.06);
+    border-radius:999px;
+    overflow:hidden;
+  }
+  .progress > i {
+    display:block;
+    height:100%;
+    width:0%;
+    background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    transition: width .8s linear;
+  }
+
+  .footer-note{
+    margin-top:10px;
+    font-size:13px;
+    color:var(--muted);
+    text-align:center;
+  }
+
+  /* big friendly start screen */
+  .start-screen{
+    text-align:center;
+    padding:22px 6px;
+  }
+  .big-start{
+    display:inline-block;
+    padding:18px 26px;
+    border-radius:999px;
+    font-size:20px;
+    font-weight:900;
+    color:white;
+    background:linear-gradient(180deg,var(--accent),#1f99ff);
+  }
+
+  @media (max-width:380px){
+    .mouth { height:190px; }
+    .region{ width:60px; height:60px; }
+    .region.front{ width:72px; height:72px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>Brush Buddy</h1>
+      <div style="font-size:13px;color:var(--muted)">Follow the highlighted area — automatic timer</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="mouth-wrap">
+      <div class="mouth" role="img" aria-label="Cartoon mouth with brushing regions">
+        <!-- Upper regions -->
+        <div id="u-chew-right" class="region small">U<br>Chew R</div>
+        <div id="u-chew-left"  class="region small">U<br>Chew L</div>
+        <div id="u-front"      class="region front">Upper<br>Front</div>
+        <div id="u-behind"     class="region small">Behind<br>Upper</div>
+
+        <div id="u-in-left"   class="region small">U<br>In L</div>
+        <div id="u-out-left"  class="region small">U<br>Out L</div>
+        <div id="u-in-right"  class="region small">U<br>In R</div>
+        <div id="u-out-right" class="region small">U<br>Out R</div>
+
+        <!-- Lower regions -->
+        <div id="l-chew-right" class="region small">L<br>Chew R</div>
+        <div id="l-chew-left"  class="region small">L<br>Chew L</div>
+        <div id="l-front"      class="region front">Lower<br>Front</div>
+        <div id="l-behind"     class="region small">Behind<br>Lower</div>
+
+        <div id="l-in-left"   class="region small">L<br>In L</div>
+        <div id="l-out-left"  class="region small">L<br>Out L</div>
+        <div id="l-in-right"  class="region small">L<br>In R</div>
+        <div id="l-out-right" class="region small">L<br>Out R</div>
+      </div>
+    </div>
+
+    <div class="status">
+      <div>
+        <div class="step-label" id="stepLabel">Ready</div>
+        <div style="font-size:13px;color:var(--muted)" id="stepHint">Tap Start when ready</div>
+      </div>
+      <div class="countdown" id="countdown">—</div>
+    </div>
+
+    <div class="progress-row">
+      <div class="progress" aria-hidden="true"><i id="progFill"></i></div>
+    </div>
+
+    <div class="controls" style="margin-top:12px;">
+      <button id="backBtn" class="ghost" aria-label="Previous step">◀︎ Prev</button>
+      <button id="startBtn" class="primary">Start</button>
+      <button id="nextBtn" class="ghost" aria-label="Next step">Next ▶︎</button>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button id="pauseBtn" class="ghost" style="flex:1">Pause</button>
+      <button id="resetBtn" class="ghost" style="flex:1">Reset</button>
+    </div>
+
+    <div class="footer-note">
+      Tip: For best results place the phone in a waterproof stand or away from the sink splash zone.
+    </div>
+  </div>
+
+  <div style="height:14px"></div>
+  <div style="font-size:12px;color:var(--muted);text-align:center">
+    Built for iPhone • Tap Start to run full sequence for upper then lower teeth
+  </div>
+</div>
+
+<script>
+/*
+ Sequence built exactly from user's steps:
+ 1) Flat, chewing sides of upper teeth — 15s each side (right, left)
+ 2) Front upper teeth — 10s
+ 3) Behind the front upper teeth — 10s
+ 4) Four upper sides — inside two sides, outside two sides — 7s per side
+ 5) repeat steps for bottom teeth
+*/
+
+const regions = {
+  // upper region element ids
+  'u-chew-right': document.getElementById('u-chew-right'),
+  'u-chew-left':  document.getElementById('u-chew-left'),
+  'u-front':      document.getElementById('u-front'),
+  'u-behind':     document.getElementById('u-behind'),
+  'u-in-left':    document.getElementById('u-in-left'),
+  'u-out-left':   document.getElementById('u-out-left'),
+  'u-in-right':   document.getElementById('u-in-right'),
+  'u-out-right':  document.getElementById('u-out-right'),
+  // lower
+  'l-chew-right': document.getElementById('l-chew-right'),
+  'l-chew-left':  document.getElementById('l-chew-left'),
+  'l-front':      document.getElementById('l-front'),
+  'l-behind':     document.getElementById('l-behind'),
+  'l-in-left':    document.getElementById('l-in-left'),
+  'l-out-left':   document.getElementById('l-out-left'),
+  'l-in-right':   document.getElementById('l-in-right'),
+  'l-out-right':  document.getElementById('l-out-right'),
+};
+
+function buildSequenceFor(upperOrLowerPrefix) {
+  // prefix "u" or "l"
+  const p = upperOrLowerPrefix;
+  return [
+    { label:`${p.toUpperCase()} chewing — Right`, duration:15, region:`${p}-chew-right` },
+    { label:`${p.toUpperCase()} chewing — Left`,  duration:15, region:`${p}-chew-left` },
+    { label:`${p.toUpperCase()} front`,           duration:10, region:`${p}-front` },
+    { label:`Behind ${p.toUpperCase()} front`,    duration:10, region:`${p}-behind` },
+    // four sides: inside two sides, outside two sides — 7s each
+    { label:`${p.toUpperCase()} inside — Left`,   duration:7, region:`${p}-in-left` },
+    { label:`${p.toUpperCase()} outside — Left`,  duration:7, region:`${p}-out-left` },
+    { label:`${p.toUpperCase()} inside — Right`,  duration:7, region:`${p}-in-right` },
+    { label:`${p.toUpperCase()} outside — Right`, duration:7, region:`${p}-out-right` }
+  ];
+}
+
+// full sequence: upper then lower
+const sequence = [
+  ...buildSequenceFor('u'),
+  ...buildSequenceFor('l')
+];
+
+let state = {
+  idx: 0,
+  secondsLeft: sequence.length ? sequence[0].duration : 0,
+  running: false,
+  ticker: null,
+};
+
+const countdown = document.getElementById('countdown');
+const stepLabel = document.getElementById('stepLabel');
+const stepHint  = document.getElementById('stepHint');
+const progFill  = document.getElementById('progFill');
+
+function renderStep(){
+  // clear active classes
+  Object.values(regions).forEach(el => el && el.classList.remove('active'));
+  if(state.idx >= sequence.length){
+    stepLabel.textContent = 'Done!';
+    stepHint.textContent = 'All areas brushed — great job!';
+    countdown.textContent = '0:00';
+    progFill.style.width = '100%';
+    navigator.vibrate && navigator.vibrate([80,40,80]);
+    return;
+  }
+  const s = sequence[state.idx];
+  stepLabel.textContent = `Step ${state.idx+1} — ${s.label}`;
+  stepHint.textContent = `Brush this area for ${s.duration} seconds`;
+  countdown.textContent = formatTime(state.secondsLeft);
+  // highlight region
+  const el = regions[s.region];
+  if(el) el.classList.add('active');
+  // progress percent
+  const percent = Math.round((state.idx / sequence.length) * 100);
+  progFill.style.width = percent + '%';
+}
+
+function formatTime(sec){
+  const mm = Math.floor(sec/60);
+  const ss = sec % 60;
+  return mm + ':' + (ss<10? '0'+ss : ss);
+}
+
+function nextStep(auto=true){
+  // go to next step
+  if(state.idx < sequence.length){
+    state.idx++;
+  }
+  if(state.idx >= sequence.length){
+    stopTicker();
+    renderStep();
+    return;
+  }
+  state.secondsLeft = sequence[state.idx].duration;
+  renderStep();
+  if(auto && state.running){
+    // beep / vibrate
+    beep();
+    navigator.vibrate && navigator.vibrate(60);
+  }
+}
+
+function prevStep(){
+  if(state.idx <= 0){
+    state.secondsLeft = sequence[0].duration;
+    renderStep();
+    return;
+  }
+  state.idx = Math.max(0, state.idx - 1);
+  state.secondsLeft = sequence[state.idx].duration;
+  renderStep();
+}
+
+function startTicker(){
+  if(state.running) return;
+  state.running = true;
+  document.getElementById('startBtn').textContent = 'Running...';
+  document.getElementById('startBtn').classList.remove('primary');
+  document.getElementById('startBtn').disabled = true;
+  // tick every second
+  state.ticker = setInterval(() => {
+    if(state.secondsLeft > 0){
+      state.secondsLeft--;
+      countdown.textContent = formatTime(state.secondsLeft);
+    } else {
+      // advance
+      nextStep(true);
+    }
+    // if finish exactly, handle percent
+    if(state.idx >= sequence.length){
+      // done
+      stopTicker();
+    }
+  }, 1000);
+}
+
+function stopTicker(){
+  state.running = false;
+  clearInterval(state.ticker);
+  state.ticker = null;
+  document.getElementById('startBtn').textContent = 'Start';
+  document.getElementById('startBtn').classList.add('primary');
+  document.getElementById('startBtn').disabled = false;
+}
+
+function pauseToggle(){
+  if(state.running){
+    clearInterval(state.ticker);
+    state.running = false;
+    state.ticker = null;
+    document.getElementById('pauseBtn').textContent = 'Resume';
+  } else {
+    // resume ticking
+    state.running = true;
+    document.getElementById('pauseBtn').textContent = 'Pause';
+    state.ticker = setInterval(() => {
+      if(state.secondsLeft > 0){
+        state.secondsLeft--;
+        countdown.textContent = formatTime(state.secondsLeft);
+      } else {
+        nextStep(true);
+        if(state.idx >= sequence.length) stopTicker();
+      }
+    }, 1000);
+  }
+}
+
+function resetAll(){
+  stopTicker();
+  state.idx = 0;
+  state.secondsLeft = sequence.length ? sequence[0].duration : 0;
+  renderStep();
+  document.getElementById('pauseBtn').textContent = 'Pause';
+}
+
+function beep(){
+  try{
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = 880;
+    g.gain.value = 0.02;
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start(0);
+    setTimeout(()=>{ o.stop(); ctx.close(); }, 120);
+  }catch(e){
+    // ignore audio errors on some browsers
+  }
+}
+
+// wire controls
+document.getElementById('startBtn').addEventListener('click', () => {
+  // start from current spot
+  if(state.idx >= sequence.length) {
+    // restart from beginning
+    resetAll();
+  }
+  startTicker();
+  beep();
+  navigator.vibrate && navigator.vibrate(80);
+});
+document.getElementById('nextBtn').addEventListener('click', () => {
+  nextStep(false);
+});
+document.getElementById('backBtn').addEventListener('click', () => {
+  prevStep();
+});
+document.getElementById('pauseBtn').addEventListener('click', () => {
+  pauseToggle();
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  resetAll();
+});
+
+// initialize display
+if(sequence.length){
+  state.secondsLeft = sequence[0].duration;
+}
+renderStep();
+
+// Accessibility: allow spacebar/enter for start when on device keyboard
+document.addEventListener('keydown', (e) => {
+  if(e.code === 'Space' || e.key === 'Enter'){
+    e.preventDefault();
+    if(!state.running) startTicker();
+    else pauseToggle();
+  }
+});
+
+</script>
+</body>
+</html>
