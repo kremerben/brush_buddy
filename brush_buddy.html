@@ -91,6 +91,16 @@ let state = { idx:0, secondsLeft: sequence[0].duration, running:false, ticker:nu
 function formatTime(sec){ const m=Math.floor(sec/60), s=sec%60; return `${m}:${s<10?'0':''}${s}`; }
 function beep(){ try{ const C=new (window.AudioContext||window.webkitAudioContext)(); const o=C.createOscillator(),g=C.createGain(); o.type='sine'; o.frequency.value=880; g.gain.value=0.02; o.connect(g); g.connect(C.destination); o.start(); setTimeout(()=>{o.stop();C.close();},120);}catch{} }
 
+/* Flash a random background color briefly */
+function flashRandomBg(ms=500){
+  const overlay = document.createElement('div');
+  overlay.className = 'flash-overlay';
+  overlay.style.backgroundColor = `red`;
+  overlay.style.animationDuration = ms + 'ms';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('animationend', ()=> overlay.remove(), { once:true });
+}
+
 /* ------------ 3D Scene ------------ */
 const container = document.getElementById('threeRoot');
 const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true, powerPreference:'high-performance' });
@@ -311,7 +321,7 @@ function renderStep(){
   setCameraToKey(s.key, false);
   beep(); navigator.vibrate && navigator.vibrate(40);
 }
-function nextStep(){ if(state.idx < sequence.length) state.idx++; if(state.idx >= sequence.length){ stopTicker(); renderStep(); return; } state.secondsLeft = sequence[state.idx].duration; renderStep(); }
+function nextStep(){ flashRandomBg(); if(state.idx < sequence.length) state.idx++; if(state.idx >= sequence.length){ stopTicker(); renderStep(); return; } state.secondsLeft = sequence[state.idx].duration; renderStep(); }
 function prevStep(){ state.idx = Math.max(0, state.idx-1); state.secondsLeft = sequence[state.idx].duration; renderStep(); }
 function startTicker(){
   if(state.running) return; state.running = true;

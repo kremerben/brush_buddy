@@ -50,6 +50,22 @@ h1{ font-size:20px; margin:0; }
   100%{ background-position:100% 50%; }
 }
 
+/* Full-viewport overlay used to flash a color momentarily */
+.flash-overlay{
+  position:fixed; inset:0; z-index:999;
+  opacity:0; pointer-events:none;
+  animation-name: flash-fade;
+  animation-timing-function: ease;
+  animation-fill-mode: both;
+}
+
+/* Quick fade-in/out for the flash overlay */
+@keyframes flash-fade{
+  0%{ opacity:0; }
+  25%{ opacity:0.6; }
+  100%{ opacity:0; }
+}
+
 .controls{ display:flex; gap:10px; margin-top:12px; }
 .controls-secondary{ display:flex; gap:8px; margin-top:10px; }
 button{
