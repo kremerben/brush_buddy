@@ -64,14 +64,14 @@ function toTitleCase(str) {
 function buildSequenceFor(prefix){
   const P = toTitleCase(prefix);
   return [
-    { key:`${prefix}-chew-right`, label:`${P} — Right`, duration:15 },
-    { key:`${prefix}-chew-left`,  label:`${P} — Left`,  duration:15 },
-    { key:`${prefix}-front`,      label:`${P} front`,           duration:10 },
-    { key:`${prefix}-behind`,     label:`Behind front teeth`,    duration:10 },
-    { key:`${prefix}-in-left`,    label:`${P} inside - outside`,   duration:7  },
-    { key:`${prefix}-out-left`,   label:`${P} outside - inside`,  duration:7  },
-    { key:`${prefix}-in-right`,   label:`${P} inside - outside`,  duration:7  },
-    { key:`${prefix}-out-right`,  label:`${P} outside - inside`, duration:7  },
+    { key:`${prefix}-chew-right`, label:`${P} — Right`,          duration:15 },
+    { key:`${prefix}-chew-left`,  label:`${P} — Left`,           duration:15 },
+    { key:`${prefix}-front`,      label:`${P} front`,            duration:11 },
+    { key:`${prefix}-behind`,     label:`Behind front teeth`,    duration:11 },
+    { key:`${prefix}-in-left`,    label:`${P} inside - outside`, duration:8  },
+    { key:`${prefix}-out-left`,   label:`${P} outside - inside`, duration:8  },
+    { key:`${prefix}-in-right`,   label:`${P} inside - outside`, duration:8  },
+    { key:`${prefix}-out-right`,  label:`${P} outside - inside`, duration:8  },
   ];
 }
 const sequence = [...buildSequenceFor('upper'), ...buildSequenceFor('lower')];
