@@ -95,3 +95,60 @@ button.ghost{ background:transparent; border:2px solid rgba(40,60,100,.06); }
   position:absolute; right:8px; bottom:8px; font-size:11px; color:#6b7890;
   background:rgba(255,255,255,.8); padding:4px 6px; border-radius:8px;
 }
+
+/* Total time since Start (header, right side) */
+/* Small phones: move the tip to the top so it does not touch the step label */
+@media (max-width:400px){ .hint{ top:8px; bottom:auto; } }
+
+.total-time{
+  margin-left:auto; flex:0 0 auto;
+  display:flex; flex-direction:column; align-items:center;
+  padding:6px 12px; border-radius:12px; background:rgba(58,162,255,.08);
+}
+.total-label{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.total-value{ font-size:20px; font-weight:800; color:var(--accent); font-variant-numeric:tabular-nums; }
+.total-time.done{ background:rgba(46,204,113,.16); }
+.total-time.done .total-value{ color:#1a8a4c; }
+
+/* Phase chips: Rinse · Floss · Mouthwash · Brush */
+.phases{ display:flex; gap:6px; margin-bottom:10px; }
+.phase{
+  flex:1; position:relative;
+  display:flex; flex-direction:column; align-items:center; gap:1px;
+  padding:5px 2px; border-radius:12px;
+  background:rgba(20,30,50,.05); color:var(--muted);
+  transition:background .3s ease, color .3s ease;
+}
+.phase-emoji{ font-size:18px; line-height:1.1; }
+.phase-name{ font-size:11px; font-weight:800; }
+.phase.active{ background:var(--accent); color:#fff; box-shadow:0 4px 12px rgba(58,162,255,.35); }
+.phase.done{ background:rgba(46,204,113,.16); color:#1a8a4c; }
+.phase.done::after{
+  content:'✓'; position:absolute; top:2px; right:6px;
+  font-size:12px; font-weight:900; color:#1a8a4c;
+}
+
+/* Countdown turns green when the check-off button is unlocked */
+.countdown{ transition:color .3s ease, background .3s ease; }
+.countdown.ok{ color:#1fae5f; background:rgba(46,204,113,.1); }
+
+/* Big "I did a good job …" button */
+button.checkoff{
+  display:block; width:100%; margin-top:12px;
+  min-height:76px; padding:16px 14px; border-radius:18px;
+  font-size:22px; font-weight:800; line-height:1.2; color:#fff;
+  background:linear-gradient(180deg,#3ddc84,#1fae5f);
+  box-shadow:0 8px 22px rgba(31,174,95,.35);
+  transition:transform .15s ease;
+  touch-action:manipulation; -webkit-tap-highlight-color:transparent;
+}
+button.checkoff:active{ transform:scale(.97); }
+button.checkoff:disabled{
+  background:#eef2f8; color:var(--muted); box-shadow:none; font-size:19px;
+  -webkit-text-fill-color:var(--muted); opacity:1;
+}
+button.checkoff.pulse{ animation:checkoff-pulse 1s ease-in-out infinite; }
+@keyframes checkoff-pulse{
+  0%,100%{ transform:scale(1);    box-shadow:0 8px 22px rgba(31,174,95,.35); }
+  50%    { transform:scale(1.04); box-shadow:0 10px 30px rgba(31,174,95,.65); }
+}
