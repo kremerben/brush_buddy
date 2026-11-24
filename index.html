@@ -13,9 +13,14 @@
       <h1>Brush Buddy 3D</h1>
       <div class="subhead">Drag/zoom to move the teeth • Debug shows coordinates</div>
     </div>
+    <div class="total-time" id="totalPill" title="Total time since Start">
+      <span class="total-label">Total</span>
+      <span class="total-value" id="totalTime">0:00</span>
+    </div>
   </header>
 
   <div class="card">
+    <div class="phases" id="phases" aria-label="Routine phases"></div>
     <div class="countdown" id="countdown">—</div>
     <div class="three-wrap" aria-label="3D teeth model">
       <div id="threeRoot"></div>
@@ -32,6 +37,8 @@
       <div class="step-label" id="stepLabel">Ready</div>
       <div class="step-hint" id="stepHint">Tap Start when ready</div>
     </div>
+
+    <button id="checkoffBtn" class="checkoff" style="display:none" disabled></button>
 
     <div class="progress"><i id="progFill"></i></div>
 
@@ -55,26 +62,14 @@
 import * as THREE from "https://esm.sh/three@0.160.0";
 import { GLTFLoader } from "https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
 import { OrbitControls } from "https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js";
-
-function toTitleCase(str) {
-  return str.toLowerCase().replace(/\b\w/g, s => s.toUpperCase());
-}
+/* Steps, timings, and timer helpers live in routine.js */
+import {
+  PHASES, buildRoutine, formatTime, checkoffStatus,
+  brushStepNumber, plannedProgress, phaseStatus, TotalTimer,
+} from "./routine.js";
 
 /* ------------ UI + Timer ------------ */
-function buildSequenceFor(prefix){
-  const P = toTitleCase(prefix);
-  return [
-    { key:`${prefix}-chew-right`, label:`${P} — Right`,          duration:15 },
-    { key:`${prefix}-chew-left`,  label:`${P} — Left`,           duration:15 },
-    { key:`${prefix}-front`,      label:`${P} front`,            duration:11 },
-    { key:`${prefix}-behind`,     label:`Behind front teeth`,    duration:11 },
-    { key:`${prefix}-in-left`,    label:`${P} inside - outside`, duration:8  },
-    { key:`${prefix}-out-left`,   label:`${P} outside - inside`, duration:8  },
-    { key:`${prefix}-in-right`,   label:`${P} inside - outside`, duration:8  },
-    { key:`${prefix}-out-right`,  label:`${P} outside - inside`, duration:8  },
-  ];
-}
-const sequence = [...buildSequenceFor('upper'), ...buildSequenceFor('lower')];
+const routine = buildRoutine();   // rinse → floss → mouthwash → 16 brushing steps
 const ui = {
   countdown: document.getElementById('countdown'),
   stepLabel: document.getElementById('stepLabel'),
@@ -86,16 +81,24 @@ const ui = {
   hud:       document.getElementById('hud'),
   hudText:   document.getElementById('hudText'),
   copyBtn:   document.getElementById('copyBtn'),
+  checkoff:  document.getElementById('checkoffBtn'),
+  phases:    document.getElementById('phases'),
+  totalPill: document.getElementById('totalPill'),
+  totalTime: document.getElementById('totalTime'),
 };
-let state = { idx:0, secondsLeft: sequence[0].duration, running:false, ticker:null };
-function formatTime(sec){ const m=Math.floor(sec/60), s=sec%60; return `${m}:${s<10?'0':''}${s}`; }
-function beep(){ try{ const C=new (window.AudioContext||window.webkitAudioContext)(); const o=C.createOscillator(),g=C.createGain(); o.type='sine'; o.frequency.value=880; g.gain.value=0.02; o.connect(g); g.connect(C.destination); o.start(); setTimeout(()=>{o.stop();C.close();},120);}catch{} }
+// started: true from the first Start until Reset (unlocks the check-off button)
+let state = { idx:0, secondsLeft: routine[0].duration, running:false, started:false, ticker:null };
+const totalTimer = new TotalTimer();
+function beep(freq=880, ms=120){ try{ const C=new (window.AudioContext||window.webkitAudioContext)(); const o=C.createOscillator(),g=C.createGain(); o.type='sine'; o.frequency.value=freq; g.gain.value=0.02; o.connect(g); g.connect(C.destination); o.start(); setTimeout(()=>{o.stop();C.close();},ms);}catch{} }
+/* Two rising notes for a check-off or the end of the routine */
+function chime(){ beep(660,110); setTimeout(()=>beep(990,180), 130); }
+function vibrate(pattern){ navigator.vibrate && navigator.vibrate(pattern); }
 
 /* Flash a random background color briefly */
-function flashRandomBg(ms=500){
+function flashRandomBg(ms=500, color='red'){
   const overlay = document.createElement('div');
   overlay.className = 'flash-overlay';
-  overlay.style.backgroundColor = `red`;
+  overlay.style.backgroundColor = color;
   overlay.style.animationDuration = ms + 'ms';
   document.body.appendChild(overlay);
   overlay.addEventListener('animationend', ()=> overlay.remove(), { once:true });
@@ -176,7 +179,7 @@ loader.load('./teeth_mr.glb',
     controls.update();
 
     // Start sequence
-    setCameraToKey(sequence[0].key, true);
+    setCameraToKey(cameraKeyFor(state.idx), true);
     renderStep();
     updateHud();
   },
@@ -200,10 +203,10 @@ function fitCameraToSphere(cam, center, radius, zoom=1.2, dirHint=new THREE.Vect
 }
 
 // Views (directional) → converted to positions relative to model radius
-function viewPositionFromDir(dir){
+function viewPositionFromDir(dir, zoom=1.25){
   if(!bradius) return new THREE.Vector3(0,0,2);
   const fov = camera.fov * Math.PI/180;
-  const dist = (bradius * 1.25) / Math.sin(fov/2);
+  const dist = (bradius * zoom) / Math.sin(fov/2);
   const d = dir.clone().normalize();
   return bcenter.clone().addScaledVector(d, dist);
 }
@@ -227,7 +230,17 @@ const VIEW_DIRS = {
   'lower-out-left'  : new THREE.Vector3(-0.8, -0.3,  0.6),
   'lower-in-right'  : new THREE.Vector3( 0.8, -0.3, -0.2),
   'lower-out-right' : new THREE.Vector3( 0.8, -0.3,  0.6),
+
+  // Front view, zoomed out, for the dancing teeth (check-off steps and Done)
+  'dance'           : new THREE.Vector3( 0.0,  0.25, 1.2),
 };
+const VIEW_ZOOM = { 'dance': 1.75 };
+
+/* Check-off steps and the Done screen use the dance view */
+function cameraKeyFor(idx){
+  const s = routine[idx];
+  return (!s || s.type === 'checkoff') ? 'dance' : s.key;
+}
 
 // Camera tween
 let tweenStart = 0, tweenDur = 550;
@@ -236,7 +249,7 @@ const startPos = new THREE.Vector3(), endPos = new THREE.Vector3();
 function setCameraToKey(key, immediate=false){
   if(!bradius) return;
   const dir = VIEW_DIRS[key] ? VIEW_DIRS[key].clone() : new THREE.Vector3(0,0,1);
-  const dst = viewPositionFromDir(dir);
+  const dst = viewPositionFromDir(dir, VIEW_ZOOM[key]);
   controls.target.copy(bcenter); // keep target locked on teeth
   controls.update();
   if(immediate){
@@ -257,6 +270,47 @@ function updateTween(now){
   controls.update();
 }
 
+/* ------------ Dance (check-off steps and Done) ------------
+ * The teeth dance while a check-off step runs, and party at the end.
+ * danceAmp eases between 0 (still) and 1 (full dance), so the teeth
+ * glide back to rest before the brushing camera views start. */
+let danceAmp = 0, danceStyle = 'swish', lastFrame = 0;
+function currentDance(){
+  if(state.idx >= routine.length) return state.started ? 'party' : null;
+  const s = routine[state.idx];
+  return (state.running && s.type === 'checkoff') ? s.dance : null;
+}
+function updateDance(now){
+  const dt = lastFrame ? Math.min(0.1, (now - lastFrame)/1000) : 0;
+  lastFrame = now;
+  const want = currentDance();
+  if(want) danceStyle = want;
+  danceAmp += ((want ? 1 : 0) - danceAmp) * (1 - Math.exp(-dt*5));
+  if(!want && danceAmp < 0.001){ danceAmp = 0; root.position.set(0,0,0); root.rotation.set(0,0,0); return; }
+
+  const t = now/1000, r = bradius || 1, a = danceAmp;
+  let px=0, py=0, rx=0, ry=0, rz=0;
+  switch(danceStyle){
+    case 'swish':  // rinse: sway side to side, like water that sloshes
+      px = Math.sin(t*3.5)*r*0.15; rz = Math.sin(t*3.5)*0.15; ry = Math.sin(t*1.75)*0.25; break;
+    case 'floss':  // the "floss" dance: hips go one way, shoulders go the other
+      px = Math.sin(t*7)*r*0.18; ry = -Math.sin(t*7)*0.35; py = Math.abs(Math.cos(t*7))*r*0.06; break;
+    case 'wobble': // mouthwash: bubbly bounce and twist
+      py = Math.abs(Math.sin(t*5))*r*0.2; ry = Math.sin(t*1.6)*0.7; rz = Math.sin(t*5)*0.1; break;
+    case 'party':  // done: big happy hop and turn
+      py = Math.abs(Math.sin(t*4))*r*0.22; ry = Math.sin(t*1.3)*1.4; rx = Math.sin(t*2.6)*0.12; break;
+  }
+  root.position.set(px*a, py*a, 0);
+  root.rotation.set(rx*a, ry*a, rz*a);
+}
+
+/* ------------ Total time display ------------ */
+let shownTotal = -1;
+function renderTotal(){
+  const sec = totalTimer.elapsedSeconds();
+  if(sec !== shownTotal){ shownTotal = sec; ui.totalTime.textContent = formatTime(sec); }
+}
+
 /* ------------ Render & Resize ------------ */
 function onResize(){
   const w = container.clientWidth, h = container.clientHeight;
@@ -265,7 +319,11 @@ function onResize(){
   renderer.setSize(w,h,false);
 }
 window.addEventListener('resize', onResize);
-renderer.setAnimationLoop((now)=>{ updateTween(now||performance.now()); renderer.render(scene, camera); });
+renderer.setAnimationLoop((now)=>{
+  now = now || performance.now();
+  updateTween(now); updateDance(now); renderTotal();
+  renderer.render(scene, camera);
+});
 
 /* ------------ Debug toggle & HUD ------------ */
 let debugOn = false, savedMaterials = [];
@@ -306,45 +364,149 @@ controls.addEventListener('change', updateHud);
 
 /* ------------ Timer wiring ------------ */
 const countdown = document.getElementById('countdown');
-function renderStep(){
-  if(state.idx >= sequence.length){
-    ui.stepLabel.textContent = 'Done!'; ui.stepHint.textContent = 'All areas brushed — great job!';
-    countdown.textContent = '0:00'; ui.progFill.style.width = '100%';
-    navigator.vibrate && navigator.vibrate([80,40,80]); return;
+
+/* Phase chips: 💧 Rinse · 🧵 Floss · 🫧 Mouthwash · 🪥 Brush */
+ui.phases.innerHTML = PHASES.map(p =>
+  `<div class="phase" data-phase="${p.id}"><span class="phase-emoji">${p.emoji}</span><span class="phase-name">${p.name}</span></div>`
+).join('');
+function renderPhases(){
+  const st = phaseStatus(routine, state.idx);
+  ui.phases.querySelectorAll('.phase').forEach(el => {
+    el.classList.toggle('active', st[el.dataset.phase] === 'active');
+    el.classList.toggle('done',   st[el.dataset.phase] === 'done');
+  });
+}
+
+/* Big check-off button and hint text for rinse / floss / mouthwash */
+function renderCheckoff(){
+  const s = routine[state.idx];
+  const btn = ui.checkoff;
+  if(!s || s.type !== 'checkoff'){
+    btn.style.display = 'none'; btn.classList.remove('pulse'); countdown.classList.remove('ok');
+    return;
   }
-  const s = sequence[state.idx];
-  ui.stepLabel.textContent = s.label;
-  ui.stepNum.textContent   = `Step ${state.idx+1}`;
-  ui.stepHint.textContent  = `Brush this area for ${s.duration} seconds`;
+  const st = checkoffStatus(s, state.secondsLeft);
+  const ready = state.started && st.unlocked;
+  btn.style.display = '';
+  btn.disabled = !ready;
+  btn.classList.toggle('pulse', ready && st.timeUp);
+  countdown.classList.toggle('ok', ready);
+
+  if(!state.started){
+    btn.textContent = s.checkoffText;
+    ui.stepHint.textContent = s.minSeconds > 0
+      ? `${s.hint} · ${s.minSeconds}–${s.maxSeconds} seconds`
+      : `${s.hint} · up to ${s.maxSeconds} seconds`;
+  } else if(!st.unlocked){
+    btn.textContent = `🔒 ${s.keepGoing}… ${formatTime(st.secondsToUnlock)}`;
+    ui.stepHint.textContent = s.hint;
+  } else {
+    btn.textContent = `✅ ${s.checkoffText}`;
+    ui.stepHint.textContent = st.timeUp ? `Time's up! Tap the green button` : `Done? Tap the green button!`;
+  }
+}
+
+/* Per-second parts: countdown, progress bar, check-off button */
+function renderTimer(){
   countdown.textContent = formatTime(state.secondsLeft);
-  ui.progFill.style.width = Math.round((state.idx / sequence.length) * 100) + '%';
-  setCameraToKey(s.key, false);
-  beep(); navigator.vibrate && navigator.vibrate(40);
+  ui.progFill.style.width = (plannedProgress(routine, state.idx, state.secondsLeft) * 100).toFixed(1) + '%';
+  renderCheckoff();
+  renderTotal();
 }
-function nextStep(){ flashRandomBg(); if(state.idx < sequence.length) state.idx++; if(state.idx >= sequence.length){ stopTicker(); renderStep(); return; } state.secondsLeft = sequence[state.idx].duration; renderStep(); }
-function prevStep(){ state.idx = Math.max(0, state.idx-1); state.secondsLeft = sequence[state.idx].duration; renderStep(); }
+
+function renderStep({ sound = true } = {}){
+  renderPhases();
+  ui.totalPill.classList.toggle('done', state.idx >= routine.length);
+  if(state.idx >= routine.length){
+    ui.stepLabel.textContent = 'Done!';
+    ui.stepHint.textContent  = `All done in ${formatTime(totalTimer.elapsedSeconds())} — great job!`;
+    ui.stepNum.textContent   = '🎉 All done';
+    countdown.textContent = '0:00'; ui.progFill.style.width = '100%';
+    renderCheckoff(); renderTotal();
+    setCameraToKey(cameraKeyFor(state.idx), false);
+    if(sound) chime();
+    vibrate([80,40,80]); return;
+  }
+  const s = routine[state.idx];
+  ui.stepLabel.textContent = s.label;
+  if(s.type === 'checkoff'){
+    const p = PHASES.find(p => p.id === s.phase);
+    ui.stepNum.textContent = `${p.emoji} ${p.name}`;
+  } else {
+    ui.stepNum.textContent  = `Step ${brushStepNumber(routine, state.idx)}`;
+    ui.stepHint.textContent = `Brush this area for ${s.duration} seconds`;
+  }
+  renderTimer();
+  setCameraToKey(cameraKeyFor(state.idx), false);
+  if(sound){ beep(); vibrate(40); }
+}
+
+/* Move to the next step (Next button, brushing timer, or check-off) */
+function advance(opts){
+  if(state.idx < routine.length) state.idx++;
+  if(state.idx >= routine.length){ stopTicker(); renderStep(opts); return; }
+  state.secondsLeft = routine[state.idx].duration;
+  renderStep(opts);
+}
+function nextStep(){ flashRandomBg(); advance(); }
+function prevStep(){ state.idx = Math.max(0, state.idx-1); state.secondsLeft = routine[state.idx].duration; renderStep(); }
+
+/* The kid taps "I did a good job …" */
+function checkOff(){
+  const s = routine[state.idx];
+  if(!s || s.type !== 'checkoff' || !state.started) return;
+  if(!checkoffStatus(s, state.secondsLeft).unlocked) return;
+  flashRandomBg(600, '#2ecc71'); chime(); vibrate([40,30,80]);
+  advance({ sound:false });
+}
+
+/* One tick per second.
+ * Brushing: count down, then go to the next step (same as before).
+ * Check-off: count down to 0, then wait for the check-off button. */
+function tick(){
+  const s = routine[state.idx];
+  if(!s){ stopTicker(); return; }
+  if(state.secondsLeft > 0){
+    state.secondsLeft--;
+    if(s.type === 'checkoff'){
+      const st = checkoffStatus(s, state.secondsLeft);
+      if(st.timeUp){ beep(660,220); vibrate([60,40,60]); }                    // time is up: wait for button
+      else if(s.minSeconds > 0 && st.elapsed === s.minSeconds){ beep(1320,90); vibrate(40); } // button unlocks
+    }
+    renderTimer();
+  } else if(s.type !== 'checkoff'){
+    nextStep();
+  }
+}
 function startTicker(){
-  if(state.running) return; state.running = true;
+  if(state.running) return; state.running = true; state.started = true;
+  totalTimer.start();
   ui.startBtn.textContent='Running...'; ui.startBtn.classList.remove('primary'); ui.startBtn.disabled = true;
-  state.ticker = setInterval(()=>{ if(state.secondsLeft>0){ state.secondsLeft--; countdown.textContent = formatTime(state.secondsLeft); } else { nextStep(); } }, 1000);
+  state.ticker = setInterval(tick, 1000);
+  renderTimer();
 }
-function stopTicker(){ state.running=false; clearInterval(state.ticker); state.ticker=null; ui.startBtn.textContent='Start'; ui.startBtn.classList.add('primary'); ui.startBtn.disabled=false; }
-function pauseToggle(){ if(state.running){ clearInterval(state.ticker); state.ticker=null; state.running=false; ui.pauseBtn.textContent='Resume'; } else { startTicker(); ui.pauseBtn.textContent='Pause'; } }
-function resetAll(){ stopTicker(); state.idx=0; state.secondsLeft = sequence[0].duration; renderStep(); ui.pauseBtn.textContent='Pause'; }
+function stopTicker(){ state.running=false; clearInterval(state.ticker); state.ticker=null; totalTimer.pause(); ui.startBtn.textContent='Start'; ui.startBtn.classList.add('primary'); ui.startBtn.disabled=false; }
+function pauseToggle(){
+  if(state.idx >= routine.length) return;   // nothing to pause on the Done screen
+  if(state.running){ clearInterval(state.ticker); state.ticker=null; state.running=false; totalTimer.pause(); renderTotal(); ui.pauseBtn.textContent='Resume'; }
+  else { startTicker(); ui.pauseBtn.textContent='Pause'; }
+}
+function resetAll(){ stopTicker(); state.idx=0; state.started=false; totalTimer.reset(); state.secondsLeft = routine[0].duration; renderStep(); ui.pauseBtn.textContent='Pause'; }
 
 /* Buttons */
 document.getElementById('startBtn').addEventListener('click', ()=>{
-  if(state.idx >= sequence.length) resetAll();
-  if(bradius){ setCameraToKey(sequence[state.idx].key, true); }
-  startTicker(); beep(); navigator.vibrate && navigator.vibrate(80);
+  if(state.idx >= routine.length) resetAll();
+  if(bradius){ setCameraToKey(cameraKeyFor(state.idx), true); }
+  startTicker(); beep(); vibrate(80);
 });
 document.getElementById('nextBtn').addEventListener('click', nextStep);
 document.getElementById('backBtn').addEventListener('click', prevStep);
 document.getElementById('pauseBtn').addEventListener('click', pauseToggle);
 document.getElementById('resetBtn').addEventListener('click', resetAll);
+ui.checkoff.addEventListener('click', checkOff);
 
 // Initialize
-state.secondsLeft = sequence[0].duration; renderStep();
+state.secondsLeft = routine[0].duration; renderStep();
 </script>
 </body>
 </html>
